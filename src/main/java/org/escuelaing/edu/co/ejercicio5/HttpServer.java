@@ -1,57 +1,76 @@
 package org.escuelaing.edu.co.ejercicio5;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
+import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 
 public class HttpServer {
+    private static final File PUBLIC = new File("src/main/resources");
+
     public static void main(String[] args) throws IOException {
-        ServerSocket serverSocket = null;
-        try {
-            serverSocket = new ServerSocket(35000);
-        } catch (IOException e) {
-            System.err.println("Could not listen on port: 35000.");
-            System.exit(1);
-        }
-        Socket clientSocket = null;
-        try {
-            System.out.println("Listo para recibir ...");
-            clientSocket = serverSocket.accept();
-        } catch (IOException e) {
-            System.err.println("Accept failed.");
-            System.exit(1);
-        }
-
-        PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true);
-        BufferedReader in = new BufferedReader(
-                new InputStreamReader(
-                        clientSocket.getInputStream()));
-        String inputLine, outputLine;
-
-        while ((inputLine = in.readLine()) != null) {
-            System.out.println("Received: " + inputLine);
-            if (!in.ready()) {
-                break;
+        if (PUBLIC.exists()) PUBLIC.mkdirs();
+        try ( ServerSocket server = new ServerSocket(35000)) {
+            System.out.println("Listening on http://localhost:35000/");
+            while (true) {
+                try (Socket client = server.accept()) {
+                    handle(client);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
             }
         }
-        outputLine = "<!DOCTYPE html>"
-                + "<html>"
-                + "<head>"
-                + "<meta charset=\"UTF-8\">"
-                + "<title>Title of the document</title>\n"
-                + "</head>"
-                + "<body>"
-                + "My Web Site"
-                + "</body>"
-                + "</html>" + inputLine;
-        out.println(outputLine);
+    }
 
-        out.close();
-        in.close();
-        clientSocket.close();
-        serverSocket.close();
+    public static void handle(Socket client) throws IOException {
+        InputStream is = client.getInputStream();
+        OutputStream os = client.getOutputStream();
+        BufferedReader br = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8));
+
+        String request = br.readLine();
+        if (request == null || request.isEmpty()) return;
+        String [] reqParts = request.split(" ");
+        if (reqParts.length < 2) return;
+
+        String path = reqParts[1].split("\\?")[0];
+
+        if ("/".equals(path)) path = "/index.html";
+        File file = new File(PUBLIC, path);
+
+        if (!file.exists() || file.isDirectory()) {
+            sendBytes(os, 403, "text/html; charset=utf-8", "<h1>jiji</h1>".getBytes(StandardCharsets.UTF_8));
+            return ;
+        }
+
+        byte [] data = Files.readAllBytes(file.toPath());
+        String ct = contentType(file.getName());
+        sendBytes(os, 200, ct, data);
+    }
+
+    public static void sendBytes(OutputStream os, int code, String contentType, byte[] data) throws IOException {
+        sendHeaders(os, code, contentType, data.length);
+        os.write(data);
+        os.flush();
+    }
+
+    public static void sendHeaders(OutputStream os, int status, String contentType, int length) throws IOException {
+        String reason = (status==200) ? "OK" : (status==404 ? "Not Found" : (status==403 ? "Forbidden" : "OK"));
+        os.write(("HTTP/1.1 " + status + " " + reason + "\r\n").getBytes(StandardCharsets.UTF_8));
+        os.write(("Content-Type: " + contentType + "\r\n").getBytes(StandardCharsets.UTF_8));
+        os.write(("Content-Length: " + length + "\r\n").getBytes(StandardCharsets.UTF_8));
+        os.write(("Connection: close\r\n").getBytes(StandardCharsets.UTF_8));
+        os.write(("\r\n").getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static String contentType(String fileName) {
+        fileName.toLowerCase();
+        if (fileName.endsWith(".html")) return "text/html; charset=utf-8";
+        if (fileName.endsWith(".css")) return "text/css; charset=utf-8";
+        if (fileName.endsWith(".js")) return "application/javascript; charset=utf-8";
+        if (fileName.endsWith(".jpeg")) return "image/jpeg;";
+        if (fileName.endsWith(".png")) return "image/png;";
+        if (fileName.endsWith(".gif")) return "image/gif;";
+        return "application/octet-stream";
     }
 }
