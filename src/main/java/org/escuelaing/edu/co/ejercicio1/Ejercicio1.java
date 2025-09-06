@@ -1,4 +1,4 @@
-package org.escuelaing.edu.co;
+package org.escuelaing.edu.co.ejercicio1;
 
 import java.io.*;
 import java.net.*;

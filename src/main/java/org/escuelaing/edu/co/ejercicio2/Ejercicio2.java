@@ -1,4 +1,4 @@
-package org.escuelaing.edu.co;
+package org.escuelaing.edu.co.ejercicio2;
 
 import java.io.*;
 import java.net.URL;
