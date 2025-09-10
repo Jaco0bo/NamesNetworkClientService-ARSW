@@ -5,6 +5,9 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
 
 public class HttpServer {
     private static final File PUBLIC = new File("src/main/resources");
@@ -33,19 +36,88 @@ public class HttpServer {
         String [] reqParts = request.split(" ");
         if (reqParts.length < 2) return;
 
+        String method = reqParts[0];
         String path = reqParts[1].split("\\?")[0];
+
+        Map<String, String> headers = new HashMap<>();
+        String line;
+        while ((line = br.readLine()) != null && !line.isEmpty()) {
+            int idx = line.indexOf(":");
+            if (idx > 0) {
+                String name = line.substring(0, idx).trim();
+                String value = line.substring(idx + 1).trim();
+                headers.put(name.toLowerCase(), value);
+            }
+        }
+
+        int contentLength = 0;
+        if (headers.containsKey("content-length")) {
+            try {
+                contentLength = Integer.parseInt(headers.get("content-length"));
+            } catch (NumberFormatException ignored) {}
+        }
+
+        String bodyStr = "";
+        if (contentLength > 0) {
+            char[] cbuf = new char[contentLength];
+            int read = 0;
+            while (read < contentLength) {
+                int r = br.read(cbuf, read, contentLength - read);
+                if (r == -1) break;
+                read += r;
+            }
+            bodyStr = new String(cbuf, 0, Math.max(0, Math.min(read, contentLength)));
+        }
+
+        if (path.startsWith("/api/")) {
+            handleApi(os, method, path, headers, bodyStr);
+            return;
+        }
 
         if ("/".equals(path)) path = "/index.html";
         File file = new File(PUBLIC, path);
 
         if (!file.exists() || file.isDirectory()) {
-            sendBytes(os, 403, "text/html; charset=utf-8", "<h1>jiji</h1>".getBytes(StandardCharsets.UTF_8));
-            return ;
+            String notFoundHtml = "<h1>404 Not Found</h1>";
+            sendBytes(os, 404, "text/html; charset=utf-8", notFoundHtml.getBytes(StandardCharsets.UTF_8));
+            return;
         }
 
         byte [] data = Files.readAllBytes(file.toPath());
         String ct = contentType(file.getName());
         sendBytes(os, 200, ct, data);
+    }
+
+    private static void handleApi(OutputStream os, String method, String path,
+                                  Map<String, String> headers, String bodyStr) throws IOException {
+        if ("GET".equalsIgnoreCase(method) && "/api/time".equals(path)) {
+            String json = "{ \"time\": \"" + new Date().toString() + "\" }";
+            sendBytes(os, 200, "application/json; charset=utf-8", json.getBytes(StandardCharsets.UTF_8));
+            return;
+        }
+
+        if ("POST".equalsIgnoreCase(method) && "/api/echo".equals(path)) {
+            String message = bodyStr;
+            try {
+                int idx = bodyStr.indexOf("\"message\"");
+                if (idx >= 0) {
+                    int colon = bodyStr.indexOf(":", idx);
+                    int firstQuote = bodyStr.indexOf("\"", colon);
+                    int secondQuote = bodyStr.indexOf("\"", firstQuote + 1);
+                    if (firstQuote >= 0 && secondQuote > firstQuote) {
+                        message = bodyStr.substring(firstQuote + 1, secondQuote);
+                    }
+                }
+            } catch (Exception ignore) {}
+
+            String escaped = message.replace("\\", "\\\\").replace("\"", "\\\"");
+            String json = "{ \"message\": \"" + escaped + "\" }";
+            sendBytes(os, 200, "application/json; charset=utf-8", json.getBytes(StandardCharsets.UTF_8));
+            return;
+        }
+
+        String json = "{ \"error\": \"Not found\" }";
+        sendBytes(os, 404, "application/json; charset=utf-8", json.getBytes(StandardCharsets.UTF_8));
     }
 
     public static void sendBytes(OutputStream os, int code, String contentType, byte[] data) throws IOException {
