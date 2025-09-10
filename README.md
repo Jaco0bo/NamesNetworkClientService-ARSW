@@ -72,7 +72,7 @@ Debera ejecutar ambas clases, pero en este caso no importa si no ejecuta primero
    Puerto remoto del otro usuario: 34000
    ```
 
-9. Haciendo esto deberia poder enviar un mensaje desde la consola 1 y este se mostrara en la consola 2, de igual forma desde la consola 2 deberian llegar los mensajes a la consola 1.
+Haciendo esto deberia poder enviar un mensaje desde la consola 1 y este se mostrara en la consola 2, de igual forma desde la consola 2 deberian llegar los mensajes a la consola 1.
 
 
 
